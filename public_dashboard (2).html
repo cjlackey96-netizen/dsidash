@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Defensible Space Inspections</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  :root {
+    --text: #1f2933; --muted: #4a5560; --rule: #d3d8dc; --bg: #ffffff; --track: #e2e6e9;
+    --chip: #eef0f2; --chip-on: #1f2933; --chip-on-text: #ffffff;
+    --moderate: #e2a92b; --high: #d9701f; --veryhigh: #b3292a; --bar: #d9701f;
+    --c2024: #8fabc9; --c2025: #e3a63b; --c2026: #c0392b;
+    --t2024: #55789f; --t2025: #a86f13; --t2026: #a52a1f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --text: #e8ebed; --muted: #b3bdc5; --rule: #454d54; --bg: #1c2126; --track: #333a40;
+      --chip: #2b3238; --chip-on: #e8ebed; --chip-on-text: #1c2126;
+      --moderate: #e8b83f; --high: #ea8236; --veryhigh: #d9484a; --bar: #ea8236;
+      --t2024: #a9c1da; --t2025: #efc46b; --t2026: #ee8074;
+    }
+  }
+  :root[data-theme="dark"] {
+    --text: #e8ebed; --muted: #b3bdc5; --rule: #454d54; --bg: #1c2126; --track: #333a40;
+    --chip: #2b3238; --chip-on: #e8ebed; --chip-on-text: #1c2126;
+    --moderate: #e8b83f; --high: #ea8236; --veryhigh: #d9484a; --bar: #ea8236;
+    --t2024: #a9c1da; --t2025: #efc46b; --t2026: #ee8074;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .page { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 30px; font-weight: 700; margin: 0 0 2px; }
+  .sub { font-size: 16px; color: var(--muted); margin: 0 0 14px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0 0 14px; }
+  .fgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .flabel { font-size: 14px; color: var(--muted); margin-right: 2px; }
+  .chip {
+    font: inherit; font-size: 15px; padding: 5px 13px; border-radius: 16px; cursor: pointer;
+    border: 1px solid var(--rule); background: var(--chip); color: var(--text);
+  }
+  .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-text); border-color: var(--chip-on); }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin-top: 14px; }
+  .card { border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+  .card h2 { font-size: 18px; font-weight: 700; margin: 0 0 2px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .kpi .label { font-size: 16px; font-weight: 600; }
+  .kpi .value { font-size: 44px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi .note { font-size: 13px; color: var(--muted); }
+  .mapcard { margin-top: 14px; }
+  .wrap { position: relative; }
+  #map { height: 520px; width: 100%; border: 1px solid var(--rule); border-radius: 4px; background: #eef0f2; }
+  .legend {
+    position: absolute; right: 10px; bottom: 26px; z-index: 500;
+    background: rgba(255,255,255,0.94); color: #1f2933; padding: 8px 12px; border-radius: 4px; font-size: 14px;
+  }
+  .legend div { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .sw { width: 18px; height: 14px; display: inline-block; border: 1px solid #8a8f94; }
+  .legend-row { display: flex; gap: 18px; font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  .legend-row span { display: inline-flex; align-items: center; gap: 7px; }
+  .line-sw { display: inline-block; width: 30px; height: 4px; border-radius: 2px; }
+  svg.chart { display: block; width: 100%; height: auto; }
+  .row { margin: 0 0 12px; }
+  .row .top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 3px; }
+  .row .nm { font-size: 17px; font-weight: 700; }
+  .row .ct { font-size: 13px; color: var(--muted); margin-left: 6px; font-weight: 400; white-space: nowrap; }
+  .row .pc { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .track { height: 18px; background: var(--track); border-radius: 3px; overflow: hidden; }
+  .bar { height: 100%; min-width: 3px; border-radius: 3px 0 0 3px; }
+  .bar.empty { min-width: 0; }
+  .vrow { margin: 0 0 11px; }
+  .vrow .top { display: flex; justify-content: space-between; gap: 10px; font-size: 15px; margin-bottom: 3px; }
+  .vrow .n { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .vrow .track { height: 14px; }
+  .flist { max-height: 340px; overflow-y: auto; border-top: 1px solid var(--rule); }
+  .frow { display: flex; justify-content: space-between; gap: 12px; padding: 7px 2px; border-bottom: 1px solid var(--rule); font-size: 15px; }
+  .frow .g { font-weight: 600; }
+  .frow .v { color: var(--muted); text-align: right; }
+  .overall { border-top: 2px solid var(--rule); padding-top: 8px; font-size: 15px; color: var(--muted); }
+  .overall strong { color: var(--text); }
+  .empty-msg { color: var(--muted); font-size: 15px; padding: 8px 0; }
+  .foot { font-size: 13px; color: var(--muted); margin: 14px 0 0; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Defensible Space Inspections</h1>
+  <p class="sub">Central FPD and Scotts Valley FPD</p>
+
+  <div class="filters">
+    <div class="fgroup"><span class="flabel">District</span><span class="fgroup" id="districts" role="group" aria-label="District"></span></div>
+    <div class="fgroup"><span class="flabel">Year</span><span class="fgroup" id="years" role="group" aria-label="Year"></span></div>
+  </div>
+
+  <div class="kpis">
+    <div class="card kpi"><div class="label">Total Inspections</div><div class="value" id="kpi-total">-</div><div class="note">Includes re-inspections</div></div>
+    <div class="card kpi"><div class="label">Parcels Inspected</div><div class="value" id="kpi-parcels">-</div><div class="note" id="kpi-parcels-note"></div></div>
+  </div>
+
+  <div class="card mapcard">
+    <h2>Where We've Been</h2>
+    <p class="hint">Each parcel is shaded by whether it was inspected in the selected year.</p>
+    <div class="wrap"><div id="map"></div><div class="legend" id="maplegend"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Inspections by Month</h2>
+      <p class="hint">Bold line is the selected year. Labels show its running total.</p>
+      <div class="legend-row" id="monthlegend"></div>
+      <svg class="chart" id="monthly" viewBox="0 0 520 300" role="img" aria-label="Line chart of inspections by month"></svg>
+    </div>
+    <div class="card">
+      <h2>Inspection Coverage by Hazard Class</h2>
+      <p class="hint">Share of parcels in each fire hazard class inspected in the selected year.</p>
+      <div id="coverage"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Top 5 Violations</h2>
+      <p class="hint">Most common violations cited in the selected year.</p>
+      <div id="violations"></div>
+    </div>
+    <div class="card">
+      <h2>Top Violation by Firewise Group</h2>
+      <p class="hint">Most common violation cited within each group.</p>
+      <div class="flist" id="firewise"></div>
+    </div>
+  </div>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+var DISTRICTS = ["Both Districts", "Central", "Scotts Valley"];
+var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var CLASSES = [
+  { n: "Moderate",  c: "var(--moderate)" },
+  { n: "High",      c: "var(--high)" },
+  { n: "Very High", c: "var(--veryhigh)" }
+];
+var DONE = "#1f6f8b", MISSING = "#efd9c4", MISSING_LINE = "#c9ad92";
+var YEAR_COLOR = { 2024: ["var(--c2024)", "var(--t2024)"], 2025: ["var(--c2025)", "var(--t2025)"], 2026: ["var(--c2026)", "var(--t2026)"] };
+
+var DATA = null, YEARS = [], state = { d: "Both Districts", y: null };
+var geo = null, inspected = {}, layer = null, map = null, bounds = { C: null, S: null, all: null };
+
+function $(id) { return document.getElementById(id); }
+function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
+function inDist(d) { return state.d === "Both Districts" || d === state.d; }
+function svgEl(name, attrs, parent, text) {
+  var e = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+
+/* ---------- filters ---------- */
+function makeChips(id, items, isActive, onPick) {
+  var box = $(id);
+  box.innerHTML = "";
+  items.forEach(function (it) {
+    var b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.textContent = String(it);
+    b.setAttribute("aria-pressed", isActive(it) ? "true" : "false");
+    b.addEventListener("click", function () { onPick(it); });
+    box.appendChild(b);
+  });
+}
+
+/* ---------- indicators ---------- */
+function renderKpis() {
+  var total = 0, parcels = 0, of = 0;
+  DATA.monthly.forEach(function (r) { if (r.y === state.y && inDist(r.d)) total += r.n; });
+  DATA.coverage.forEach(function (r) { if (r.y === state.y && inDist(r.d)) { parcels += r.i; of += r.t; } });
+  $("kpi-total").textContent = fmt(total);
+  $("kpi-parcels").textContent = fmt(parcels);
+  $("kpi-parcels-note").textContent = "of " + fmt(of) + " parcels in the fire hazard zones";
+}
+
+/* ---------- monthly chart ---------- */
+function monthlySeries(y) {
+  var vals = [0,0,0,0,0,0,0,0,0,0,0,0], last = 0;
+  DATA.monthly.forEach(function (r) {
+    if (r.y !== y) return;
+    if (r.m > last) last = r.m;
+    if (inDist(r.d)) vals[r.m - 1] += r.n;
+  });
+  return { vals: vals, last: last };
+}
+
+function niceScale(max) {
+  if (max <= 0) return { step: 1, top: 4 };
+  var raw = max / 4, mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+  var mult = [1, 2, 2.5, 5, 10].filter(function (m) { return m * mag >= raw; })[0];
+  var step = mult * mag;
+  return { step: step, top: step * 4 };
+}
+
+function renderMonthly() {
+  var svg = $("monthly");
+  svg.innerHTML = "";
+  var L = 46, R = 26, T = 26, B = 30, W = 520, H = 300, PW = W - L - R, PH = H - T - B;
+  var series = {}, max = 0;
+  YEARS.forEach(function (y) {
+    series[y] = monthlySeries(y);
+    series[y].vals.forEach(function (v, i) { if (i < series[y].last && v > max) max = v; });
+  });
+  var sc = niceScale(max);
+  function x(i) { return L + i * (PW / 11); }
+  function y(v) { return T + PH * (1 - v / sc.top); }
+
+  for (var k = 0; k <= 4; k++) {
+    var tv = sc.step * k;
+    svgEl("line", { x1: L, x2: W - R, y1: y(tv), y2: y(tv), stroke: "var(--rule)", "stroke-width": 1 }, svg);
+    svgEl("text", { x: L - 8, y: y(tv) + 4, "text-anchor": "end", "font-size": 12, fill: "var(--muted)" }, svg, fmt(tv));
+  }
+  MONTHS.forEach(function (m, i) {
+    svgEl("text", { x: x(i), y: H - 8, "text-anchor": "middle", "font-size": 12, fill: "var(--muted)" }, svg, m);
+  });
+
+  var order = YEARS.filter(function (yy) { return yy !== state.y; }).concat([state.y]);
+  order.forEach(function (yy) {
+    var s = series[yy], sel = yy === state.y, col = YEAR_COLOR[yy][0];
+    if (!s.last) return;
+    var pts = [];
+    for (var i = 0; i < s.last; i++) pts.push(x(i) + "," + y(s.vals[i]));
+    svgEl("polyline", {
+      points: pts.join(" "), fill: "none", stroke: col, "stroke-width": sel ? 4 : 2.5,
+      "stroke-linejoin": "round", "stroke-linecap": "round", opacity: sel ? 1 : 0.45
+    }, svg);
+    for (var j = 0; j < s.last; j++) {
+      svgEl("circle", { cx: x(j), cy: y(s.vals[j]), r: sel ? 5 : 3, fill: col, opacity: sel ? 1 : 0.45 }, svg);
+    }
+    if (sel) {
+      var cum = 0;
+      for (var m2 = 0; m2 < s.last; m2++) {
+        cum += s.vals[m2];
+        if (cum === 0) continue;
+        svgEl("text", {
+          x: x(m2), y: y(s.vals[m2]) - 10, "text-anchor": "middle", "font-size": 12, "font-weight": 700,
+          fill: YEAR_COLOR[yy][1], stroke: "var(--bg)", "stroke-width": 3, "paint-order": "stroke"
+        }, svg, fmt(cum));
+      }
+    }
+  });
+
+  $("monthlegend").innerHTML = YEARS.slice().sort().map(function (yy) {
+    return '<span><i class="line-sw" style="background:' + YEAR_COLOR[yy][0] + '"></i>' + yy + '</span>';
+  }).join("");
+}
+
+/* ---------- hazard class bars ---------- */
+function renderCoverage() {
+  var box = $("coverage");
+  box.innerHTML = "";
+  var totI = 0, totT = 0;
+  CLASSES.forEach(function (k) {
+    var i = 0, t = 0;
+    DATA.coverage.forEach(function (r) { if (r.y === state.y && r.c === k.n && inDist(r.d)) { i += r.i; t += r.t; } });
+    totI += i; totT += t;
+    var has = t > 0, pct = has ? (i / t) * 100 : 0;
+    var row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML =
+      '<div class="top"><div><span class="nm">' + k.n + '</span><span class="ct">' + (has ? fmt(i) + " / " + fmt(t) : "No Parcels") + '</span></div>' +
+      '<span class="pc">' + (has ? Math.round(pct) + "%" : "\u2014") + '</span></div>' +
+      '<div class="track" role="img" aria-label="' + k.n + ': ' + (has ? Math.round(pct) + " percent inspected" : "no parcels") + '">' +
+      '<div class="bar' + (has ? "" : " empty") + '" style="width:' + pct.toFixed(2) + '%;background:' + k.c + '"></div></div>';
+    box.appendChild(row);
+  });
+  var o = document.createElement("div");
+  o.className = "overall";
+  o.innerHTML = "All Parcels: <strong>" + (totT ? ((totI / totT) * 100).toFixed(1) : "0.0") + "%</strong> (" + fmt(totI) + " / " + fmt(totT) + ")";
+  box.appendChild(o);
+}
+
+/* ---------- violations ---------- */
+function renderViolations() {
+  var box = $("violations");
+  box.innerHTML = "";
+  var m = {};
+  DATA.violations.forEach(function (r) { if (r.y === state.y && inDist(r.d)) m[r.l] = (m[r.l] || 0) + r.n; });
+  var list = Object.keys(m).map(function (k) { return { l: k, n: m[k] }; })
+    .sort(function (a, b) { return b.n - a.n || (a.l < b.l ? -1 : 1); }).slice(0, 5);
+  if (!list.length) {
+    box.innerHTML = '<div class="empty-msg">No Violations Recorded</div>';
+    return;
+  }
+  var max = list[0].n;
+  list.forEach(function (it) {
+    var row = document.createElement("div");
+    row.className = "vrow";
+    var top = document.createElement("div");
+    top.className = "top";
+    var a = document.createElement("span"); a.textContent = it.l;
+    var b = document.createElement("span"); b.className = "n"; b.textContent = fmt(it.n);
+    top.appendChild(a); top.appendChild(b);
+    var tr = document.createElement("div"); tr.className = "track";
+    var br = document.createElement("div"); br.className = "bar"; br.style.width = ((it.n / max) * 100).toFixed(1) + "%"; br.style.background = "var(--bar)";
+    tr.appendChild(br);
+    row.appendChild(top); row.appendChild(tr);
+    box.appendChild(row);
+  });
+}
+
+/* ---------- Firewise groups ---------- */
+function renderFirewise() {
+  var box = $("firewise");
+  box.innerHTML = "";
+  var rows = DATA.firewise.filter(function (r) { return r.y === state.y && inDist(r.d); })
+    .sort(function (a, b) { return a.g < b.g ? -1 : a.g > b.g ? 1 : 0; });
+  if (!rows.length) {
+    box.innerHTML = '<div class="empty-msg">No Groups</div>';
+    return;
+  }
+  rows.forEach(function (r) {
+    var row = document.createElement("div");
+    row.className = "frow";
+    var g = document.createElement("span"); g.className = "g"; g.textContent = r.g;
+    var v = document.createElement("span"); v.className = "v"; v.textContent = r.v;
+    row.appendChild(g); row.appendChild(v);
+    box.appendChild(row);
+  });
+}
+
+/* ---------- map ---------- */
+function styleFor(f) {
+  var p = f.properties;
+  if (!inDist(p.d === "C" ? "Central" : "Scotts Valley")) return { opacity: 0, fillOpacity: 0, weight: 0 };
+  if (inspected[state.y] && inspected[state.y].has(p.i)) {
+    return { color: DONE, weight: 0.5, opacity: 1, fillColor: DONE, fillOpacity: 0.85 };
+  }
+  return { color: MISSING_LINE, weight: 0.5, opacity: 1, fillColor: MISSING, fillOpacity: 0.85 };
+}
+
+function renderMap(refit) {
+  var missing = state.y === YEARS[0] ? "Not Yet Inspected in " + state.y : "Not Inspected in " + state.y;
+  $("maplegend").innerHTML =
+    '<div><span class="sw" style="background:' + DONE + '"></span>Inspected in ' + state.y + '</div>' +
+    '<div><span class="sw" style="background:' + MISSING + ';border-color:' + MISSING_LINE + '"></span>' + missing + '</div>';
+  if (!layer) return;
+  layer.setStyle(styleFor);
+  if (refit) {
+    var b = state.d === "Central" ? bounds.C : state.d === "Scotts Valley" ? bounds.S : bounds.all;
+    if (b && b.isValid()) map.fitBounds(b, { padding: [10, 10] });
+  }
+}
+
+function startMap(g, s) {
+  geo = g;
+  YEARS.forEach(function (y) { inspected[y] = new Set((s.inspected && s.inspected[y]) || []); });
+  layer = L.geoJSON(geo, { style: styleFor, interactive: false, renderer: L.canvas() }).addTo(map);
+  bounds.C = L.latLngBounds([]);
+  bounds.S = L.latLngBounds([]);
+  layer.eachLayer(function (l) { bounds[l.feature.properties.d].extend(l.getBounds()); });
+  bounds.all = L.latLngBounds([]);
+  if (bounds.C.isValid()) bounds.all.extend(bounds.C);
+  if (bounds.S.isValid()) bounds.all.extend(bounds.S);
+  renderMap(true);
+}
+
+/* ---------- everything ---------- */
+function renderAll(refit) {
+  makeChips("districts", DISTRICTS, function (d) { return d === state.d; }, function (d) { state.d = d; renderAll(true); });
+  makeChips("years", YEARS, function (y) { return y === state.y; }, function (y) { state.y = y; renderAll(false); });
+  renderKpis();
+  renderMonthly();
+  renderCoverage();
+  renderViolations();
+  renderFirewise();
+  renderMap(refit);
+}
+
+function start(data) {
+  DATA = data;
+  YEARS = data.years.slice().sort(function (a, b) { return b - a; });
+  state.y = YEARS[0];
+  $("foot").textContent =
+    "Total Inspections counts every inspection visit, including re-inspections. Parcels Inspected counts each parcel once. " +
+    "Counts cover Central FPD and Scotts Valley FPD only. Updated " + data.updated + ".";
+  renderAll(false);
+}
+
+map = L.map("map", { preferCanvas: true, zoomSnap: 0.25 });
+map.setView([37.0, -121.93], 11);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+  attribution: "Tiles &copy; Esri", maxZoom: 16
+}).addTo(map);
+
+var stamp = "?t=" + Date.now();
+fetch("panel_data.json" + stamp).then(function (r) { return r.json(); }).then(start).catch(function () {
+  document.querySelector(".kpis").innerHTML = '<div class="empty-msg">The dashboard data could not be loaded.</div>';
+});
+Promise.all([
+  fetch("parcels_public.geojson" + stamp).then(function (r) { return r.json(); }),
+  fetch("parcel_status.json" + stamp).then(function (r) { return r.json(); })
+]).then(function (res) {
+  var wait = setInterval(function () { if (DATA) { clearInterval(wait); startMap(res[0], res[1]); } }, 50);
+}).catch(function () {
+  $("maplegend").textContent = "The map data could not be loaded.";
+});
+</script>
+</body>
+</html>
