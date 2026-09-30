@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inspection Coverage by Hazard Class</title>
+<style>
+  :root {
+    --text: #1f2933; --muted: #4a5560; --track: #e2e6e9; --rule: #c9cfd4; --bg: #ffffff;
+    --chip: #eef0f2; --chip-on: #1f2933; --chip-on-text: #ffffff;
+    --moderate: #e2a92b; --high: #d9701f; --veryhigh: #b3292a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --text: #e8ebed; --muted: #b3bdc5; --track: #333a40; --rule: #454d54; --bg: #1c2126;
+      --chip: #2b3238; --chip-on: #e8ebed; --chip-on-text: #1c2126;
+      --moderate: #e8b83f; --high: #ea8236; --veryhigh: #d9484a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --text: #e8ebed; --muted: #b3bdc5; --track: #333a40; --rule: #454d54; --bg: #1c2126;
+    --chip: #2b3238; --chip-on: #e8ebed; --chip-on-text: #1c2126;
+    --moderate: #e8b83f; --high: #ea8236; --veryhigh: #d9484a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    padding: 12px 16px 10px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  h1 { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+  .chip {
+    font: inherit; font-size: 14px; padding: 4px 11px; border-radius: 14px; cursor: pointer;
+    border: 1px solid var(--rule); background: var(--chip); color: var(--text);
+  }
+  .chip[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-text); border-color: var(--chip-on); }
+  .hint { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+  .row { margin: 0 0 12px; }
+  .line { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 3px; }
+  .name { font-size: 20px; font-weight: 700; }
+  .count { font-size: 15px; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+  .pct { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .track { height: 22px; background: var(--track); border-radius: 3px; overflow: hidden; }
+  .bar { height: 100%; min-width: 3px; border-radius: 3px 0 0 3px; }
+  .bar.empty { min-width: 0; }
+  .overall { border-top: 2px solid var(--rule); padding-top: 8px; font-size: 16px; color: var(--muted); }
+  .overall strong { color: var(--text); }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+  <h1>Inspection Coverage by Hazard Class</h1>
+  <div class="filters" id="districts" role="group" aria-label="District"></div>
+  <div class="filters" id="years" role="group" aria-label="Year"></div>
+  <p class="hint">These filters apply to the bars below.</p>
+  <div id="rows"></div>
+  <div class="overall" id="overall"></div>
+  <p class="note">Updated 2026-09-30</p>
+
+<script>
+var DATA = [{"y": 2021, "d": "Central", "c": "High", "i": 0, "t": 2796}, {"y": 2021, "d": "Central", "c": "Moderate", "i": 1, "t": 4998}, {"y": 2021, "d": "Central", "c": "Very High", "i": 0, "t": 30}, {"y": 2021, "d": "Scotts Valley", "c": "High", "i": 0, "t": 269}, {"y": 2021, "d": "Scotts Valley", "c": "Moderate", "i": 0, "t": 2180}, {"y": 2022, "d": "Central", "c": "High", "i": 0, "t": 2796}, {"y": 2022, "d": "Central", "c": "Moderate", "i": 7, "t": 4998}, {"y": 2022, "d": "Central", "c": "Very High", "i": 0, "t": 30}, {"y": 2022, "d": "Scotts Valley", "c": "High", "i": 0, "t": 269}, {"y": 2022, "d": "Scotts Valley", "c": "Moderate", "i": 0, "t": 2180}, {"y": 2023, "d": "Central", "c": "High", "i": 304, "t": 2796}, {"y": 2023, "d": "Central", "c": "Moderate", "i": 1106, "t": 4998}, {"y": 2023, "d": "Central", "c": "Very High", "i": 6, "t": 30}, {"y": 2023, "d": "Scotts Valley", "c": "High", "i": 3, "t": 269}, {"y": 2023, "d": "Scotts Valley", "c": "Moderate", "i": 0, "t": 2180}, {"y": 2024, "d": "Central", "c": "High", "i": 564, "t": 2796}, {"y": 2024, "d": "Central", "c": "Moderate", "i": 1579, "t": 4998}, {"y": 2024, "d": "Central", "c": "Very High", "i": 0, "t": 30}, {"y": 2024, "d": "Scotts Valley", "c": "High", "i": 0, "t": 269}, {"y": 2024, "d": "Scotts Valley", "c": "Moderate", "i": 0, "t": 2180}, {"y": 2025, "d": "Central", "c": "High", "i": 620, "t": 2796}, {"y": 2025, "d": "Central", "c": "Moderate", "i": 1946, "t": 4998}, {"y": 2025, "d": "Central", "c": "Very High", "i": 12, "t": 30}, {"y": 2025, "d": "Scotts Valley", "c": "High", "i": 8, "t": 269}, {"y": 2025, "d": "Scotts Valley", "c": "Moderate", "i": 29, "t": 2180}, {"y": 2026, "d": "Central", "c": "High", "i": 475, "t": 2796}, {"y": 2026, "d": "Central", "c": "Moderate", "i": 1305, "t": 4998}, {"y": 2026, "d": "Central", "c": "Very High", "i": 1, "t": 30}, {"y": 2026, "d": "Scotts Valley", "c": "High", "i": 44, "t": 269}, {"y": 2026, "d": "Scotts Valley", "c": "Moderate", "i": 280, "t": 2180}];
+var YEARS = [2021, 2022, 2023, 2024, 2025, 2026];
+var CLASSES = [
+  { n: "Moderate",  c: "var(--moderate)" },
+  { n: "High",      c: "var(--high)" },
+  { n: "Very High", c: "var(--veryhigh)" }
+];
+var DISTRICTS = ["Both Districts", "Central", "Scotts Valley"];
+var state = { d: "Both Districts", y: 2026 };
+
+function fmt(n) { return n.toLocaleString("en-US"); }
+
+function sums(cls) {
+  var i = 0, t = 0;
+  DATA.forEach(function (r) {
+    if (r.y !== state.y) return;
+    if (state.d !== "Both Districts" && r.d !== state.d) return;
+    if (cls && r.c !== cls) return;
+    i += r.i; t += r.t;
+  });
+  return { i: i, t: t };
+}
+
+function makeChips(id, items, isActive, onPick) {
+  var box = document.getElementById(id);
+  box.innerHTML = "";
+  items.forEach(function (it) {
+    var b = document.createElement("button");
+    b.className = "chip";
+    b.type = "button";
+    b.textContent = String(it);
+    b.setAttribute("aria-pressed", isActive(it) ? "true" : "false");
+    b.addEventListener("click", function () { onPick(it); });
+    box.appendChild(b);
+  });
+}
+
+function render() {
+  makeChips("districts", DISTRICTS, function (d) { return d === state.d; }, function (d) { state.d = d; render(); });
+  makeChips("years", YEARS, function (y) { return y === state.y; }, function (y) { state.y = y; render(); });
+
+  var rows = document.getElementById("rows");
+  rows.innerHTML = "";
+  CLASSES.forEach(function (k) {
+    var s = sums(k.n);
+    var has = s.t > 0;
+    var pct = has ? (s.i / s.t) * 100 : 0;
+    var row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML =
+      '<div class="line"><div><span class="name">' + k.n + '</span>' +
+      '<span class="count">' + (has ? fmt(s.i) + " / " + fmt(s.t) : "No Parcels") + '</span></div>' +
+      '<span class="pct">' + (has ? Math.round(pct) + "%" : "\u2014") + '</span></div>' +
+      '<div class="track" role="img" aria-label="' + k.n + ': ' + (has ? Math.round(pct) + " percent inspected" : "no parcels") + '">' +
+      '<div class="bar' + (has ? "" : " empty") + '" style="width:' + pct.toFixed(2) + '%;background:' + k.c + '"></div></div>';
+    rows.appendChild(row);
+  });
+
+  var all = sums(null);
+  var op = all.t ? (all.i / all.t) * 100 : 0;
+  document.getElementById("overall").innerHTML =
+    'All Mandated Parcels: <strong>' + op.toFixed(1) + '%</strong> (' + fmt(all.i) + ' / ' + fmt(all.t) + ')';
+}
+render();
+</script>
+</body>
+</html>
